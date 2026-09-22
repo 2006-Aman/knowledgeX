@@ -434,36 +434,13 @@ function renderApp() {
   const app = document.getElementById('app');
   if (!app) return;
 
-  // 1. Render full-screen Dashboard Landing Page if activeTab is 'dashboard'
-  if (state.activeTab === 'dashboard') {
-    if (window._teardownDashboard) {
-      window._teardownDashboard();
-      window._teardownDashboard = null;
-    }
-    app.innerHTML = renderDashboardView(state.documentsList, state.workflowState, state.user);
-    window._teardownDashboard = initDashboardAnimations({
-      onGetStarted: () => {
-        if (state.user) {
-          state.activeTab = 'chat';
-        } else {
-          state.activeTab = 'auth';
-          state.authMode = 'login';
-        }
-        renderApp();
-      },
-      onOpenKnowledgeX: () => {
-        state.activeTab = 'chat';
-        renderApp();
-      },
-      onOpenConsultAI: () => {
-        state.activeTab = 'chat';
-        renderApp();
-      }
-    });
-    return;
+  // Teardown dashboard animations if not on dashboard
+  if (state.activeTab !== 'dashboard' && window._teardownDashboard) {
+    window._teardownDashboard();
+    window._teardownDashboard = null;
   }
 
-  // 2. Render full-screen interactive Auth View if activeTab is 'auth'
+  // 1. Render full-screen interactive Auth View if activeTab is 'auth'
   if (state.activeTab === 'auth') {
     if (window._teardownDashboard) {
       window._teardownDashboard();
@@ -473,12 +450,6 @@ function renderApp() {
     attachAuthEventListeners();
     initConstellationCanvas();
     return;
-  }
-
-  // Teardown dashboard animations if moving to workspace
-  if (window._teardownDashboard) {
-    window._teardownDashboard();
-    window._teardownDashboard = null;
   }
 
   const currentConv = state.conversations.find(c => c.id === state.activeConvId) || state.conversations[0];
@@ -493,6 +464,8 @@ function renderApp() {
     `;
   } else if (state.activeTab === 'documents') {
     mainContentHtml = renderDocumentsView(state.documentsList, state.isUploadingDoc);
+  } else if (state.activeTab === 'dashboard') {
+    mainContentHtml = renderDashboardView(state.documentsList, state.workflowState, state.user);
   }
 
   app.innerHTML = `
@@ -508,6 +481,15 @@ function renderApp() {
 
   attachEventListeners();
   renderAllDiagrams(app);
+
+  if (state.activeTab === 'dashboard') {
+    window._teardownDashboard = initDashboardAnimations({
+      onOpenKnowledgeX: () => {
+        state.activeTab = 'chat';
+        renderApp();
+      }
+    });
+  }
 }
 
 // ── AUTHENTICATION EVENT LISTENERS ──
@@ -821,7 +803,7 @@ function attachEventListeners() {
         return;
       }
       const convId = row.getAttribute('data-conv-id');
-      if (convId && state.activeConvId !== convId) {
+      if (convId && (state.activeConvId !== convId || state.activeTab !== 'chat')) {
         state.activeConvId = convId;
         state.activeTab = 'chat';
         renderApp();

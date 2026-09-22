@@ -91,40 +91,6 @@ export function renderLeftSidebar(conversations, activeConvId, activeNavTab = 'c
         </div>
       </div>
 
-      <!-- User Account Widget / Sign In in Left Sidebar -->
-      <div class="sidebar-account-section">
-        ${user ? `
-          <div class="sidebar-user-pill">
-            <div class="sidebar-user-left">
-              <div class="header-avatar-circle" style="width:28px;height:28px;font-size:0.75rem;flex-shrink:0;">${(user.name || 'U').charAt(0).toUpperCase()}</div>
-              <div class="sidebar-user-meta">
-                <span class="sidebar-user-name" title="${escapeHtml(user.name)}">${escapeHtml(user.name)}</span>
-                <span class="sidebar-user-badge">
-                  <span class="status-dot-green"></span>
-                  Supabase Live
-                </span>
-              </div>
-            </div>
-            <button class="btn-sidebar-logout" id="btn-sidebar-logout" title="Sign Out">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                <polyline points="16 17 21 12 16 7"></polyline>
-                <line x1="21" y1="12" x2="9" y2="12"></line>
-              </svg>
-            </button>
-          </div>
-        ` : `
-          <button class="sidebar-signin-btn" id="btn-sidebar-signin" title="Sign in with Supabase">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
-              <polyline points="10 17 15 12 10 7"></polyline>
-              <line x1="15" y1="12" x2="3" y2="12"></line>
-            </svg>
-            <span>Sign In / Sign Up</span>
-          </button>
-        `}
-      </div>
-
       <!-- Turn Information Into Impact Promo Card -->
       <div class="sidebar-promo-card">
         <div class="promo-title">Turn Information<br>Into Impact</div>
@@ -135,18 +101,6 @@ export function renderLeftSidebar(conversations, activeConvId, activeNavTab = 'c
           <path d="M0 38 Q 45 22, 90 32 T 180 20 Q 205 14, 220 25 L 220 50 L 0 50 Z" fill="#93C5FD" opacity="0.6"/>
           <path d="M0 42 Q 60 28, 120 40 T 220 30 L 220 50 L 0 50 Z" fill="#60A5FA" opacity="0.9"/>
         </svg>
-      </div>
-
-      <!-- Footer at Bottom of Left Sidebar -->
-      <div class="sidebar-footer">
-        <div>© 2024 KnowledgeX</div>
-        <div class="sidebar-footer-azure">
-          <span>Built with</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="#0078D4">
-            <path d="M12 2L2 19.5h7.5L12 14l2.5 5.5H22L12 2z"/>
-          </svg>
-          <span>Azure AI Foundry</span>
-        </div>
       </div>
     </aside>
   `;

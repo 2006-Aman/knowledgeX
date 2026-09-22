@@ -15,6 +15,7 @@ class Settings(BaseModel):
     # Supabase Credentials
     SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
     SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", "")
+    SUPABASE_SERVICE_ROLE_KEY: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
     
     # Azure OpenAI Credentials
     AZURE_ENDPOINT: str = os.getenv("AZURE_ENDPOINT", "")

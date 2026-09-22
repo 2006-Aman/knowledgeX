@@ -45,7 +45,7 @@ export function renderAuthView(authMode = 'login', isLoading = false, prefillEma
           <div class="auth-card-header">
             <div class="auth-brand-logo-wrap">
               <div class="auth-brand-aura"></div>
-              ${getMotionRobotHtml(74, true)}
+              ${getMotionRobotHtml(48, true)}
             </div>
             <h1 class="auth-card-title">${isLogin ? 'Welcome Back' : 'Create Account'}</h1>
             <p class="auth-card-subtitle">
