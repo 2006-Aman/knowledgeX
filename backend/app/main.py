@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.api import chat, documents, workflows, analytics
+from app.api import chat, documents, workflows, analytics, auth
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -19,6 +19,7 @@ app.add_middleware(
 )
 
 # Register API Routers
+app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
 app.include_router(chat.router, prefix=f"{settings.API_V1_STR}/chat", tags=["chat"])
 app.include_router(documents.router, prefix=f"{settings.API_V1_STR}/documents", tags=["documents"])
 app.include_router(workflows.router, prefix=f"{settings.API_V1_STR}/workflows", tags=["workflows"])
@@ -36,7 +37,7 @@ async def health_check():
 @app.get("/")
 async def root():
     return {
-        "message": "ConsultAI API Server running.",
+        "message": "KnowledgeX API Server running.",
         "docs": "/docs",
         "api_v1": settings.API_V1_STR
     }

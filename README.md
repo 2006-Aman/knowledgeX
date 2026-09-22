@@ -1,11 +1,11 @@
-# ConsultAI · Executive & Academic Intelligence System 🧠
+# KnowledgeX · Executive & Academic Intelligence System 🧠
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Vite](https://img.shields.io/badge/Vite-5.4+-646CFF.svg?logo=vite&logoColor=white)](https://vitejs.dev)
 [![Azure OpenAI](https://img.shields.io/badge/Azure_OpenAI-GPT--4.1--mini-0078D4.svg?logo=microsoftazure&logoColor=white)](https://azure.microsoft.com/en-us/products/ai-services/openai-service)
 [![Supabase](https://img.shields.io/badge/Supabase-pgvector-3ECF8E.svg?logo=supabase&logoColor=white)](https://supabase.com)
 
-**ConsultAI** is an executive-grade Retrieval-Augmented Generation (RAG) platform and academic intelligence assistant. It combines high-fidelity document parsing, hybrid vector/keyword search with Reciprocal Rank Fusion (RRF), Azure OpenAI (GPT-4.1-mini), and Supabase vector database to deliver precise, verbatim answers and structured schedule lookups.
+**KnowledgeX** is an executive-grade Retrieval-Augmented Generation (RAG) platform and academic intelligence assistant. It combines high-fidelity document parsing, hybrid vector/keyword search with Reciprocal Rank Fusion (RRF), Azure OpenAI (GPT-4.1-mini), and Supabase vector database to deliver precise, verbatim answers and structured schedule lookups.
 
 ---
 
@@ -22,7 +22,7 @@
 ## 📁 Project Architecture
 
 ```
-consultai/
+knowledgeX/
 ├── backend/
 │   ├── app/
 │   │   ├── api/            # API endpoints (chat, documents, workflows)

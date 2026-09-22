@@ -5,48 +5,78 @@ import { renderDocumentsView } from './components/documentsView.js';
 import { renderDocumentModal } from './components/documentModal.js';
 import { showToast, showConfirmDialog, showPromptDialog } from './components/toast.js';
 import { renderAllDiagrams } from './components/diagramRenderer.js';
+import { renderAuthView, initConstellationCanvas } from './components/authView.js';
+import { renderDashboardView, initDashboardAnimations } from './components/dashboardView.js';
 
-// ── INITIAL CONSULTAI GREETING & NEW CONVERSATION GENERATOR ──
-function createInitialGreetingMessage() {
+// ── USER-SCOPED STORAGE KEYS & CONVERSATION HELPERS ──
+function getUserConversationsKey(user) {
+  if (!user || (!user.id && !user.email)) return 'knowledgex_conversations_guest';
+  return `knowledgex_conversations_user_${user.id || user.email}`;
+}
+
+function createInitialGreetingMessage(userName = '') {
   const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const greeting = userName ? `Hello ${userName}! This is KnowledgeX, how can I help you?` : 'Hello! This is KnowledgeX, how can I help you?';
   return {
     role: 'assistant',
     isGreeting: true,
-    answer: 'Hello! This is ConsultAI, how can I help you?',
-    explanation: 'ConsultAI is your AI intelligence assistant powered by Azure OpenAI and Supabase Vector Knowledge Base. How can I help you today?',
+    answer: greeting,
+    explanation: 'KnowledgeX is your AI intelligence assistant powered by Azure OpenAI and Supabase Vector Knowledge Base. How can I help you today?',
     timestamp: timeStr
   };
 }
 
-function createNewConversation(title = 'New Consultation') {
+function createNewConversation(title = 'New Consultation', userName = '') {
   const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   return {
     id: `conv_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
     title: title,
     time: timeStr,
-    messages: [createInitialGreetingMessage()]
+    messages: [createInitialGreetingMessage(userName)]
   };
 }
 
-// Helper to safely load stored conversations
-function loadSavedConversations() {
+// Helper to safely load stored conversations exclusively for the given user
+function loadSavedConversations(user) {
   try {
-    const saved = localStorage.getItem('consultai_conversations');
+    const key = getUserConversationsKey(user);
+    const legacyKey = key.replace('knowledgex_', 'consultai_');
+    const saved = localStorage.getItem(key) || localStorage.getItem(legacyKey);
     if (saved) {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
   } catch (e) {
     console.error('Error reading localStorage conversations:', e);
   }
-  return [createNewConversation('New Consultation')];
+  const userName = user ? user.name : '';
+  return [createNewConversation('New Consultation', userName)];
 }
 
+// Helper to safely load authenticated user from Supabase session
+function loadSavedUser() {
+  try {
+    const saved = localStorage.getItem('knowledgex_auth_user') || localStorage.getItem('consultai_auth_user');
+    return saved ? JSON.parse(saved) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Purge legacy un-scoped conversations to prevent generic chat leakage
+try {
+  localStorage.removeItem('knowledgex_conversations');
+  localStorage.removeItem('consultai_conversations');
+} catch (e) {}
+
 // ── GLOBAL APPLICATION STATE ──
+const savedUser = loadSavedUser();
 const state = {
-  activeTab: 'chat', // 'chat' | 'documents'
+  user: savedUser,
+  authMode: 'login', // 'login' | 'signup'
+  authPrefillEmail: '',
+  isAuthLoading: false,
+  activeTab: 'dashboard', // Strictly starts with Dashboard page
   activeConvId: '',
   searchQuery: '',
   isStreaming: false,
@@ -57,7 +87,7 @@ const state = {
   },
   referencedDocs: [],
   documentsList: [],
-  conversations: loadSavedConversations(),
+  conversations: loadSavedConversations(savedUser),
   docModal: {
     isOpen: false,
     filename: '',
@@ -69,21 +99,68 @@ const state = {
   }
 };
 
-// Ensure site ALWAYS opens on a fresh new chat with greeting
+// Ensure site opens on a fresh user-scoped chat with greeting
 let freshConv = state.conversations.find(c => c.messages.filter(m => m.role === 'user').length === 0);
 if (!freshConv) {
-  freshConv = createNewConversation('New Consultation');
+  freshConv = createNewConversation('New Consultation', state.user ? state.user.name : '');
   state.conversations.unshift(freshConv);
 }
 state.activeConvId = freshConv.id;
-state.activeTab = 'chat';
 
+// Background sync to Supabase Cloud Database for logged-in user
+let syncTimeout = null;
 function persistConversations() {
   try {
-    localStorage.setItem('consultai_conversations', JSON.stringify(state.conversations));
+    const key = getUserConversationsKey(state.user);
+    localStorage.setItem(key, JSON.stringify(state.conversations));
   } catch (e) {
     console.error('Failed to save conversations to localStorage:', e);
   }
+
+  // Cloud sync to Supabase if user is logged in
+  if (state.user && state.user.id) {
+    if (syncTimeout) clearTimeout(syncTimeout);
+    syncTimeout = setTimeout(async () => {
+      try {
+        await fetch('/api/auth/conversations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: state.user.id,
+            conversations: state.conversations
+          })
+        });
+      } catch (err) {
+        console.error('Failed to sync conversations to Supabase:', err);
+      }
+    }, 800);
+  }
+}
+
+// Fetch user's conversations from Supabase cloud database
+async function fetchUserConversationsFromSupabase(user) {
+  if (!user || !user.id) return;
+  try {
+    const res = await fetch(`/api/auth/conversations?user_id=${encodeURIComponent(user.id)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data.conversations && Array.isArray(data.conversations) && data.conversations.length > 0) {
+        state.conversations = data.conversations;
+        const key = getUserConversationsKey(user);
+        localStorage.setItem(key, JSON.stringify(data.conversations));
+        if (!state.conversations.find(c => c.id === state.activeConvId)) {
+          state.activeConvId = state.conversations[0].id;
+        }
+        renderApp();
+      }
+    }
+  } catch (err) {
+    console.error('Failed to fetch user conversations from Supabase:', err);
+  }
+}
+
+if (savedUser) {
+  fetchUserConversationsFromSupabase(savedUser);
 }
 
 // ── FETCH DOCUMENTS FROM SUPABASE (PERSISTENCE ON RELOAD) ──
@@ -357,6 +434,53 @@ function renderApp() {
   const app = document.getElementById('app');
   if (!app) return;
 
+  // 1. Render full-screen Dashboard Landing Page if activeTab is 'dashboard'
+  if (state.activeTab === 'dashboard') {
+    if (window._teardownDashboard) {
+      window._teardownDashboard();
+      window._teardownDashboard = null;
+    }
+    app.innerHTML = renderDashboardView(state.documentsList, state.workflowState, state.user);
+    window._teardownDashboard = initDashboardAnimations({
+      onGetStarted: () => {
+        if (state.user) {
+          state.activeTab = 'chat';
+        } else {
+          state.activeTab = 'auth';
+          state.authMode = 'login';
+        }
+        renderApp();
+      },
+      onOpenKnowledgeX: () => {
+        state.activeTab = 'chat';
+        renderApp();
+      },
+      onOpenConsultAI: () => {
+        state.activeTab = 'chat';
+        renderApp();
+      }
+    });
+    return;
+  }
+
+  // 2. Render full-screen interactive Auth View if activeTab is 'auth'
+  if (state.activeTab === 'auth') {
+    if (window._teardownDashboard) {
+      window._teardownDashboard();
+      window._teardownDashboard = null;
+    }
+    app.innerHTML = renderAuthView(state.authMode, state.isAuthLoading, state.authPrefillEmail);
+    attachAuthEventListeners();
+    initConstellationCanvas();
+    return;
+  }
+
+  // Teardown dashboard animations if moving to workspace
+  if (window._teardownDashboard) {
+    window._teardownDashboard();
+    window._teardownDashboard = null;
+  }
+
   const currentConv = state.conversations.find(c => c.id === state.activeConvId) || state.conversations[0];
 
   let mainContentHtml = '';
@@ -372,9 +496,9 @@ function renderApp() {
   }
 
   app.innerHTML = `
-    ${renderLeftSidebar(state.conversations, state.activeConvId, state.activeTab)}
+    ${renderLeftSidebar(state.conversations, state.activeConvId, state.activeTab, state.user)}
     <div class="app-main-content">
-      ${renderTopNav(state.searchQuery)}
+      ${renderTopNav(state.searchQuery, state.user)}
       <div class="app-body-container">
         ${mainContentHtml}
       </div>
@@ -384,6 +508,191 @@ function renderApp() {
 
   attachEventListeners();
   renderAllDiagrams(app);
+}
+
+// ── AUTHENTICATION EVENT LISTENERS ──
+function attachAuthEventListeners() {
+  const tabLogin = document.getElementById('btn-tab-login');
+  const tabSignup = document.getElementById('btn-tab-signup');
+  if (tabLogin) {
+    tabLogin.addEventListener('click', () => {
+      if (state.authMode !== 'login') {
+        state.authMode = 'login';
+        renderApp();
+      }
+    });
+  }
+  if (tabSignup) {
+    tabSignup.addEventListener('click', () => {
+      if (state.authMode !== 'signup') {
+        state.authMode = 'signup';
+        renderApp();
+      }
+    });
+  }
+
+  const togglePwd = document.getElementById('btn-toggle-password');
+  const pwdInput = document.getElementById('auth-password');
+  if (togglePwd && pwdInput) {
+    togglePwd.addEventListener('click', () => {
+      pwdInput.type = pwdInput.type === 'password' ? 'text' : 'password';
+    });
+  }
+
+  const btnGuest = document.getElementById('btn-auth-guest');
+  if (btnGuest) {
+    btnGuest.addEventListener('click', () => {
+      state.user = null;
+      state.conversations = loadSavedConversations(null);
+      let freshConv = state.conversations.find(c => c.messages.filter(m => m.role === 'user').length === 0);
+      if (!freshConv) {
+        freshConv = createNewConversation('New Consultation');
+        state.conversations.unshift(freshConv);
+      }
+      state.activeConvId = freshConv.id;
+      persistConversations();
+      state.activeTab = 'chat';
+      renderApp();
+    });
+  }
+
+  const btnBackDash = document.getElementById('btn-auth-back-dashboard');
+  if (btnBackDash) {
+    btnBackDash.addEventListener('click', () => {
+      state.activeTab = 'dashboard';
+      renderApp();
+    });
+  }
+
+  const btnForgot = document.getElementById('btn-forgot-password');
+  if (btnForgot) {
+    btnForgot.addEventListener('click', () => {
+      showToast({
+        title: 'Password Recovery',
+        message: 'Password recovery links are dispatched through your registered Supabase email.',
+        type: 'info'
+      });
+    });
+  }
+
+  const authForm = document.getElementById('auth-form');
+  if (authForm) {
+    authForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (state.isAuthLoading) return;
+
+      const emailInput = document.getElementById('auth-email');
+      const pwdInput = document.getElementById('auth-password');
+      const nameInput = document.getElementById('auth-name');
+      const confirmPwdInput = document.getElementById('auth-confirm-password');
+
+      const email = emailInput ? emailInput.value.trim() : '';
+      const password = pwdInput ? pwdInput.value.trim() : '';
+
+      if (state.authMode === 'signup') {
+        const name = nameInput ? nameInput.value.trim() : '';
+        const confirmPassword = confirmPwdInput ? confirmPwdInput.value.trim() : '';
+
+        if (!name) {
+          showToast({ title: 'Validation Error', message: 'Please enter your full name.', type: 'error' });
+          return;
+        }
+        if (password !== confirmPassword) {
+          showToast({ title: 'Validation Error', message: 'Passwords do not match. Please re-enter.', type: 'error' });
+          return;
+        }
+        if (password.length < 6) {
+          showToast({ title: 'Validation Error', message: 'Password must be at least 6 characters.', type: 'error' });
+          return;
+        }
+
+        state.isAuthLoading = true;
+        renderApp();
+
+        try {
+          const res = await fetch('/api/auth/signup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password, name })
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.detail || 'Sign up failed.');
+          }
+
+          // Registration successful! Do NOT open chatbot yet.
+          // Switch to login tab so user must authenticate first.
+          state.isAuthLoading = false;
+          state.authMode = 'login';
+          state.authPrefillEmail = email;
+
+          showToast({
+            title: 'Account Created Successfully!',
+            message: `Welcome, ${data.user.name || email}! Your account has been registered in Supabase. Please sign in with your password to continue.`,
+            type: 'success'
+          });
+          renderApp();
+        } catch (err) {
+          state.isAuthLoading = false;
+          renderApp();
+          showToast({
+            title: 'Sign Up Error',
+            message: err.message || 'Unable to register account in Supabase.',
+            type: 'error'
+          });
+        }
+      } else {
+        // Sign In mode
+        state.isAuthLoading = true;
+        renderApp();
+
+        try {
+          const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.detail || 'Login failed.');
+          }
+
+          state.user = data.user;
+          localStorage.setItem('knowledgex_auth_user', JSON.stringify(data.user));
+          localStorage.setItem('knowledgex_auth_token', data.token);
+
+          // Load ONLY this user's conversations
+          state.conversations = loadSavedConversations(data.user);
+          let freshConv = state.conversations.find(c => c.messages.filter(m => m.role === 'user').length === 0);
+          if (!freshConv) {
+            freshConv = createNewConversation('New Consultation', data.user.name);
+            state.conversations.unshift(freshConv);
+          }
+          state.activeConvId = freshConv.id;
+          persistConversations();
+          fetchUserConversationsFromSupabase(data.user);
+
+          state.isAuthLoading = false;
+          state.activeTab = 'chat';
+
+          showToast({
+            title: 'Welcome Back!',
+            message: `Signed in as ${data.user.name}.`,
+            type: 'success'
+          });
+          renderApp();
+        } catch (err) {
+          state.isAuthLoading = false;
+          renderApp();
+          showToast({
+            title: 'Login Error',
+            message: err.message || 'Invalid credentials.',
+            type: 'error'
+          });
+        }
+      }
+    });
+  }
 }
 
 // ── EVENT LISTENERS ATTACHMENT ──
@@ -407,13 +716,103 @@ function attachEventListeners() {
       }
       if (tab && state.activeTab !== tab) {
         state.activeTab = tab;
-        if (tab === 'documents') {
+        if (tab === 'documents' || tab === 'dashboard') {
           await fetchDocuments();
         }
         renderApp();
       }
     });
   });
+
+  // 1a. Top Navigation Dashboard Trigger
+  const btnTopDashboard = document.getElementById('btn-top-dashboard');
+  if (btnTopDashboard) {
+    btnTopDashboard.addEventListener('click', async () => {
+      if (state.activeTab !== 'dashboard') {
+        state.activeTab = 'dashboard';
+        await fetchDocuments();
+        renderApp();
+      }
+    });
+  }
+
+  // 1b. Sign In / Sign Up triggers
+  const btnHeaderSignin = document.getElementById('btn-header-signin');
+  if (btnHeaderSignin) {
+    btnHeaderSignin.addEventListener('click', () => {
+      state.activeTab = 'auth';
+      state.authMode = 'login';
+      renderApp();
+    });
+  }
+
+  const btnSidebarSignin = document.getElementById('btn-sidebar-signin');
+  if (btnSidebarSignin) {
+    btnSidebarSignin.addEventListener('click', () => {
+      state.activeTab = 'auth';
+      state.authMode = 'login';
+      renderApp();
+    });
+  }
+
+  // 1c. User Profile Dropdown Toggle
+  const btnUserProfile = document.getElementById('btn-user-profile');
+  const userDropdown = document.getElementById('user-profile-dropdown');
+  if (btnUserProfile && userDropdown) {
+    btnUserProfile.addEventListener('click', (e) => {
+      e.stopPropagation();
+      userDropdown.style.display = userDropdown.style.display === 'block' ? 'none' : 'block';
+    });
+    document.addEventListener('click', () => {
+      if (userDropdown) userDropdown.style.display = 'none';
+    });
+  }
+
+  // 1d. Logout Actions
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (e) {}
+    state.user = null;
+    localStorage.removeItem('knowledgex_auth_user');
+    localStorage.removeItem('knowledgex_auth_token');
+    localStorage.removeItem('consultai_auth_user');
+    localStorage.removeItem('consultai_auth_token');
+
+    // Reset conversations to guest
+    state.conversations = loadSavedConversations(null);
+    let freshConv = state.conversations.find(c => c.messages.filter(m => m.role === 'user').length === 0);
+    if (!freshConv) {
+      freshConv = createNewConversation('New Consultation');
+      state.conversations.unshift(freshConv);
+    }
+    state.activeConvId = freshConv.id;
+
+    state.activeTab = 'dashboard';
+    state.authMode = 'login';
+    showToast({
+      title: 'Signed Out',
+      message: 'You have been safely signed out.',
+      type: 'info'
+    });
+    renderApp();
+  };
+
+  const btnHeaderLogout = document.getElementById('btn-header-logout');
+  if (btnHeaderLogout) {
+    btnHeaderLogout.addEventListener('click', (e) => {
+      e.stopPropagation();
+      handleLogout();
+    });
+  }
+
+  const btnSidebarLogout = document.getElementById('btn-sidebar-logout');
+  if (btnSidebarLogout) {
+    btnSidebarLogout.addEventListener('click', (e) => {
+      e.stopPropagation();
+      handleLogout();
+    });
+  }
 
   // 3. Conversation row selection
   document.querySelectorAll('.conversation-row').forEach(row => {
@@ -643,8 +1042,16 @@ function attachEventListeners() {
       const idxStr = e.currentTarget.getAttribute('data-msg-idx');
       let targetIdx = idxStr !== null && idxStr !== undefined ? parseInt(idxStr, 10) : -1;
 
-      // Find the target assistant message index
-      if (isNaN(targetIdx) || targetIdx < 0 || targetIdx >= currentConv.messages.length) {
+      // Validate targetIdx specifically points to an assistant message (never a user message or greeting)
+      if (
+        isNaN(targetIdx) || 
+        targetIdx < 0 || 
+        targetIdx >= currentConv.messages.length || 
+        currentConv.messages[targetIdx].role !== 'assistant' ||
+        currentConv.messages[targetIdx].isGreeting
+      ) {
+        // Fallback: search backwards for the last valid assistant message
+        targetIdx = -1;
         for (let i = currentConv.messages.length - 1; i >= 0; i--) {
           if (currentConv.messages[i].role === 'assistant' && !currentConv.messages[i].isGreeting) {
             targetIdx = i;
@@ -652,6 +1059,8 @@ function attachEventListeners() {
           }
         }
       }
+
+      if (targetIdx === -1) return;
 
       // Find the user query that preceded this assistant response
       let userQuery = '';
@@ -662,7 +1071,7 @@ function attachEventListeners() {
         }
       }
 
-      // If not found, find any last user message
+      // Fallback to last user message if not immediately preceding
       if (!userQuery) {
         const lastUserMsg = [...currentConv.messages].reverse().find(m => m.role === 'user');
         if (lastUserMsg) userQuery = lastUserMsg.content;
@@ -670,10 +1079,22 @@ function attachEventListeners() {
 
       if (!userQuery) return;
 
-      // Remove the assistant message that is being regenerated (so it gets replaced)
-      if (targetIdx >= 0 && targetIdx < currentConv.messages.length) {
-        currentConv.messages.splice(targetIdx, 1);
+      // Check if this assistant message is from an older question or the last question in the chat
+      const isLastQuestionInChat = !currentConv.messages.slice(targetIdx + 1).some(
+        m => m.role === 'user' || (m.role === 'assistant' && !m.isGreeting)
+      );
+
+      // If clicked regenerate on a question asked before:
+      // Return the question along with the regenerated answer at the bottom of the chat
+      if (!isLastQuestionInChat) {
+        executeSendMessage(userQuery);
+        return;
       }
+
+      // If it is the last question in the chat:
+      // Change the answer in-place (like it's doing now)
+      const insertIdx = targetIdx;
+      currentConv.messages.splice(targetIdx, 1);
 
       state.isStreaming = true;
       persistConversations();
@@ -707,14 +1128,20 @@ function attachEventListeners() {
         }
 
         const data = await res.json();
-        currentConv.messages.push({
+        const newMsg = {
           role: 'assistant',
           answer: data.answer,
           explanation: data.explanation,
           sources: data.sources || [],
           duration: data.duration || '2s',
           timestamp: data.timestamp || timeStr
-        });
+        };
+
+        if (insertIdx >= 0 && insertIdx <= currentConv.messages.length) {
+          currentConv.messages.splice(insertIdx, 0, newMsg);
+        } else {
+          currentConv.messages.push(newMsg);
+        }
 
         if (data.sources && data.sources.length > 0) {
           state.referencedDocs = data.sources;
@@ -726,14 +1153,19 @@ function attachEventListeners() {
         }
       } catch (err) {
         console.error("Regenerate error:", err);
-        currentConv.messages.push({
+        const errCard = {
           role: 'assistant',
           answer: `Direct response generated for your query.`,
           explanation: `We encountered an issue regenerating this response. Please verify backend connectivity.`,
           sources: [],
           duration: '1s',
           timestamp: timeStr
-        });
+        };
+        if (insertIdx >= 0 && insertIdx <= currentConv.messages.length) {
+          currentConv.messages.splice(insertIdx, 0, errCard);
+        } else {
+          currentConv.messages.push(errCard);
+        }
       } finally {
         state.isStreaming = false;
         persistConversations();
@@ -1072,10 +1504,12 @@ function attachEventListeners() {
         confirmText: 'Start New',
         cancelText: 'Cancel',
         onConfirm: () => {
-          localStorage.removeItem('consultai_conversations');
-          const fresh = createNewConversation('New Consultation');
+          const key = getUserConversationsKey(state.user);
+          localStorage.removeItem(key);
+          const fresh = createNewConversation('New Consultation', state.user ? state.user.name : '');
           state.conversations = [fresh];
           state.activeConvId = fresh.id;
+          persistConversations();
           state.activeTab = 'chat';
           renderApp();
           showToast({
@@ -1103,7 +1537,13 @@ window.addEventListener('keydown', (e) => {
 });
 
 // Initialize on DOM load
-window.addEventListener('DOMContentLoaded', async () => {
+const initApp = async () => {
   await fetchDocuments();
   renderApp();
-});
+};
+
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}

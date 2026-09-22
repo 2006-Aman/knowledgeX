@@ -586,7 +586,11 @@ def list_indexed_documents() -> List[Dict]:
         types = {}
         for row in data:
             meta = row.get("metadata", {})
-            src = meta.get("source", "Document.pdf")
+            if meta.get("type") in ["app_user", "user_conversations"]:
+                continue
+            src = meta.get("source")
+            if not src:
+                continue
             sources[src] = sources.get(src, 0) + 1
             ext = src.lower().rsplit(".", 1)[-1] if "." in src else ""
             if ext in ["png", "jpg", "jpeg", "webp", "bmp"] or meta.get("type") == "image":

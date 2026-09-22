@@ -9,7 +9,7 @@ export function renderWorkflowsView() {
     <div class="full-tab-workspace">
       <div>
         <h1 class="tab-header-title">Multi-Agent Workflow Pipelines</h1>
-        <p class="tab-header-desc">Inspect, configure, and monitor orchestrated DAG pipelines that power ConsultAI decision making.</p>
+        <p class="tab-header-desc">Inspect, configure, and monitor orchestrated DAG pipelines that power KnowledgeX decision making.</p>
       </div>
 
       <div style="display:flex;flex-direction:column;gap:1rem;">

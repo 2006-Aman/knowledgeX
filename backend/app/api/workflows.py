@@ -7,7 +7,7 @@ router = APIRouter()
 @router.get("/current", response_model=Dict[str, Any])
 async def get_current_workflow():
     return {
-        "title": "ConsultAI Executive Intelligence Pipeline",
+        "title": "KnowledgeX Executive Intelligence Pipeline",
         "description": "Multi-agent RAG workflow with semantic intent routing and document synthesis.",
         "nodes": get_default_workflow_nodes(),
         "status": "Ready",

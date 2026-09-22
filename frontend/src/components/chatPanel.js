@@ -50,7 +50,9 @@ function renderMarkdown(text) {
   s = s.replace(/([^\n])\n(\|[^\n]+\|\n\|[- :|]+\|)/g, '$1\n\n$2');
   s = s.replace(/(\|[^\n]+\|)\n([^\|\n\s][^\n]*)/g, '$1\n\n$2');
   try {
-    const raw = marked.parse(s);
+    let raw = marked.parse(s);
+    // Wrap tables in responsive wrapper to guarantee clean horizontal scrolling without column clipping
+    raw = raw.replace(/<table>([\s\S]*?)<\/table>/gi, '<div class="table-responsive-wrapper"><table>$1</table></div>');
     return raw
       .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
       .replace(/on\w+="[^"]*"/gi, '')
@@ -74,15 +76,15 @@ export function renderChatPanel(messages, isStreaming = false) {
             <div class="greeting-sparkle-icon">
               ${getRobotAvatarHtml(64, true)}
             </div>
-            <h1 class="greeting-hero-heading">Hello! This is ConsultAI, how can I help you?</h1>
+            <h1 class="greeting-hero-heading">Hello! This is KnowledgeX, how can I help you?</h1>
           </div>
         ` : `
-          ${messages.filter(msg => !msg.isGreeting).map((msg, idx) => renderMessageRow(msg, idx)).join('')}
+          ${messages.map((msg, idx) => renderMessageRow(msg, idx)).join('')}
         `}
 
         ${isStreaming ? `
           <div class="message-row-assistant">
-            <div class="assistant-msg-avatar" title="ConsultAI Robot Assistant">
+            <div class="assistant-msg-avatar" title="KnowledgeX Robot Assistant">
               ${getRobotAvatarHtml(36)}
             </div>
             <div class="streaming-bubble">
@@ -174,7 +176,7 @@ function renderMessageRow(msg, idx) {
 
   return `
     <div class="message-row-assistant">
-      <div class="assistant-msg-avatar" title="ConsultAI Robot Assistant">
+      <div class="assistant-msg-avatar" title="KnowledgeX Robot Assistant">
         ${getRobotAvatarHtml(36)}
       </div>
 
@@ -182,7 +184,7 @@ function renderMessageRow(msg, idx) {
         <!-- Assistant Header -->
         <div class="assistant-header-line">
           <div class="assistant-header-left">
-            <span class="assistant-name">ConsultAI</span>
+            <span class="assistant-name">KnowledgeX</span>
             <span class="execution-badge">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="20 6 9 17 4 12"></polyline>
@@ -218,6 +220,43 @@ function renderMessageRow(msg, idx) {
               <span class="section-label-title">Explanation</span>
             </div>
             <div class="explanation-text">${renderMarkdown(explanation)}</div>
+          </div>
+        ` : ''}
+
+        <!-- Section 3: Sources & Citations -->
+        ${sources && sources.length > 0 ? `
+          <div class="sources-section-card">
+            <div class="section-label-row">
+              <div class="section-label-icon-purple">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                  <line x1="16" y1="13" x2="8" y2="13"></line>
+                  <line x1="16" y1="17" x2="8" y2="17"></line>
+                  <polyline points="10 9 9 9 8 9"></polyline>
+                </svg>
+              </div>
+              <span class="section-label-title-purple">Source Document${sources.length > 1 ? 's' : ''} (${sources.length})</span>
+            </div>
+            <div class="sources-chips-container">
+              ${sources.map(s => {
+                const sName = typeof s === 'string' ? s : (s.name || 'Document');
+                const sType = (typeof s === 'object' && s.type) ? s.type.toUpperCase() : (sName.toLowerCase().endsWith('.pdf') ? 'PDF' : 'IMAGE');
+                const isImage = sType.includes('IMAGE') || sType.includes('PNG') || sType.includes('JPG') || sType.includes('WEBP');
+                const iconSvg = isImage
+                  ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>`
+                  : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>`;
+                const sim = (typeof s === 'object' && s.similarity) ? Math.round(s.similarity * 100) : null;
+                return `
+                  <div class="source-doc-pill" title="Source: ${escapeForAttr(sName)}">
+                    <span class="source-doc-icon">${iconSvg}</span>
+                    <span class="source-doc-name">${escapeHtml(sName)}</span>
+                    <span class="source-doc-type-badge">${escapeHtml(sType)}</span>
+                    ${sim ? `<span class="source-doc-score-badge">${sim}% match</span>` : ''}
+                  </div>
+                `;
+              }).join('')}
+            </div>
           </div>
         ` : ''}
 

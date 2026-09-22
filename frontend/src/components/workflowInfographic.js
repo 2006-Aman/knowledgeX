@@ -369,7 +369,7 @@ export function parseWorkflowDataFromText(text) {
     return {
       title: 'PROCESS WORKFLOW',
       quote: '"A LITTLE\nPROGRESS\nEACH DAY\nLEADS TO\nBIG RESULTS."',
-      author: 'CONSULTAI',
+      author: 'KNOWLEDGEX',
       steps: extractedSteps,
       decision: DEFAULT_STUDY_WORKFLOW.decision
     };

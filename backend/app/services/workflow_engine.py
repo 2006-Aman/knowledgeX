@@ -23,7 +23,7 @@ def get_default_workflow_nodes() -> List[Dict[str, Any]]:
         },
         {
             "id": "manager",
-            "title": "ConsultAI-Manager",
+            "title": "KnowledgeX-Manager",
             "type": "agent",
             "icon": "agent",
             "color": "#06B6D4",
@@ -41,7 +41,7 @@ def get_default_workflow_nodes() -> List[Dict[str, Any]]:
         },
         {
             "id": "knowledge",
-            "title": "ConsultAI-Knowledge",
+            "title": "KnowledgeX-Knowledge",
             "type": "retriever",
             "icon": "database",
             "color": "#14B8A6",
@@ -59,7 +59,7 @@ def get_default_workflow_nodes() -> List[Dict[str, Any]]:
         },
         {
             "id": "final_answer",
-            "title": "ConsultAI-FinalAnswer",
+            "title": "KnowledgeX-FinalAnswer",
             "branch": "FACTUAL",
             "type": "synthesizer",
             "icon": "document",
@@ -79,7 +79,7 @@ def get_default_workflow_nodes() -> List[Dict[str, Any]]:
         }
     ]
 
-def execute_consultai_workflow(query: str, has_context: bool, start_time: float) -> Dict[str, Any]:
+def execute_knowledgex_workflow(query: str, has_context: bool, start_time: float) -> Dict[str, Any]:
     elapsed = max(round(time.time() - start_time, 1), 1.2)
     elapsed_str = f"{int(elapsed)}s" if elapsed >= 1 else f"{elapsed}s"
     
@@ -88,7 +88,10 @@ def execute_consultai_workflow(query: str, has_context: bool, start_time: float)
     return {
         "execution_id": f"wf_{int(time.time() * 1000)}",
         "status": "Completed",
+        "elapsed": elapsed_str,
         "total_duration": elapsed_str,
-        "nodes": nodes,
-        "active_branch": "FACTUAL" if has_context else "FACTUAL"
+        "active_branch": "FACTUAL" if has_context else "GENERAL",
+        "nodes": nodes
     }
+
+execute_consultai_workflow = execute_knowledgex_workflow

@@ -361,21 +361,195 @@
   display: block;
 }
 
-/* ── SIDEBAR FOOTER ── */
-.sidebar-footer {
-  padding-top: 0.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.72rem;
-  color: var(--color-text-muted);
+/* ── SIDEBAR ACCOUNT SECTION ── */
+.sidebar-account-section {
+  margin-top: auto;
+  margin-bottom: 0.75rem;
 }
 
-.sidebar-footer-azure {
+.sidebar-user-pill {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  justify-content: space-between;
+  padding: 0.55rem 0.75rem;
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(167, 139, 250, 0.25);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
+  backdrop-filter: blur(12px);
+}
+
+.sidebar-user-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow: hidden;
+}
+
+.sidebar-user-meta {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-user-name {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--color-text-title);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-user-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #059669;
+}
+
+.status-dot-green {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10B981;
+  display: inline-block;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+}
+
+.btn-sidebar-logout {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0.3rem;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.btn-sidebar-logout:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.sidebar-signin-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #ffffff;
+  background: linear-gradient(135deg, #7c6df0 0%, #a855f7 100%);
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(124, 109, 240, 0.25);
+  transition: all 0.2s ease;
+}
+
+.sidebar-signin-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(124, 109, 240, 0.35);
+}
+
+/* ── TOP NAV AUTH ELEMENTS ── */
+.btn-header-signin {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.95rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #ffffff;
+  background: linear-gradient(135deg, #7c6df0 0%, #a855f7 100%);
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(124, 109, 240, 0.25);
+  transition: all 0.2s ease;
+}
+
+.btn-header-signin:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(124, 109, 240, 0.35);
+}
+
+.user-profile-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 210px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(167, 139, 250, 0.25);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-dropdown);
+  padding: 0.6rem 0.5rem;
+  z-index: 1000;
+  animation: fadeInMenu 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.user-dropdown-header {
+  display: flex;
+  flex-direction: column;
+  padding: 0.3rem 0.4rem 0.5rem;
+}
+
+.dropdown-user-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--color-text-title);
+}
+
+.dropdown-user-email {
   font-size: 0.72rem;
-  font-weight: 500;
-  color: var(--color-text-main);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: rgba(167, 139, 250, 0.15);
+  margin: 0.35rem 0;
+}
+
+.dropdown-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #059669;
+  padding: 0.25rem 0.4rem;
+}
+
+.btn-dropdown-logout {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #ef4444;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.btn-dropdown-logout:hover {
+  background: rgba(239, 68, 68, 0.08);
 }

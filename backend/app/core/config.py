@@ -8,7 +8,7 @@ env_path = Path(__file__).resolve().parent.parent.parent / ".env"
 load_dotenv(dotenv_path=env_path, override=True)
 
 class Settings(BaseModel):
-    PROJECT_NAME: str = "ConsultAI"
+    PROJECT_NAME: str = "KnowledgeX"
     VERSION: str = "2.0.0"
     API_V1_STR: str = "/api"
     
