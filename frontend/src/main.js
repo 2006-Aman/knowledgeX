@@ -232,6 +232,9 @@ async function handlePdfUpload(file) {
       message: 'Supported formats are PDF documents and images (PNG, JPG, JPEG, WEBP).',
       type: 'warning'
     });
+    return;
+  }
+
   const MAX_FILE_SIZE_MB = 4.5;
   if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
     const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
