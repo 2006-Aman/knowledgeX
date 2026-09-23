@@ -232,6 +232,15 @@ async function handlePdfUpload(file) {
       message: 'Supported formats are PDF documents and images (PNG, JPG, JPEG, WEBP).',
       type: 'warning'
     });
+  const MAX_FILE_SIZE_MB = 4.5;
+  if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+    const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
+    showToast({
+      title: 'File Exceeds 4.5 MB Limit',
+      message: `"${file.name}" is ${sizeMB} MB. Serverless upload limit is 4.5 MB. Please compress your PDF before uploading.`,
+      type: 'warning',
+      duration: 8000
+    });
     return;
   }
 
@@ -255,6 +264,9 @@ async function handlePdfUpload(file) {
     });
 
     if (!res.ok) {
+      if (res.status === 413) {
+        throw new Error('File size exceeds serverless limit (max 4.5 MB). Please compress the PDF.');
+      }
       const errData = await res.json().catch(() => ({}));
       throw new Error(errData.detail || `Upload failed with status ${res.status}`);
     }
