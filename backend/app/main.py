@@ -18,12 +18,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register API Routers
-app.include_router(auth.router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
-app.include_router(chat.router, prefix=f"{settings.API_V1_STR}/chat", tags=["chat"])
-app.include_router(documents.router, prefix=f"{settings.API_V1_STR}/documents", tags=["documents"])
-app.include_router(workflows.router, prefix=f"{settings.API_V1_STR}/workflows", tags=["workflows"])
-app.include_router(analytics.router, prefix=f"{settings.API_V1_STR}/analytics", tags=["analytics"])
+# Register API Routers (Support both '/api' and root prefixes for seamless Vercel / proxy routing)
+for prefix in [settings.API_V1_STR, ""]:
+    app.include_router(auth.router, prefix=f"{prefix}/auth" if prefix else "/auth", tags=["auth"])
+    app.include_router(chat.router, prefix=f"{prefix}/chat" if prefix else "/chat", tags=["chat"])
+    app.include_router(documents.router, prefix=f"{prefix}/documents" if prefix else "/documents", tags=["documents"])
+    app.include_router(workflows.router, prefix=f"{prefix}/workflows" if prefix else "/workflows", tags=["workflows"])
+    app.include_router(analytics.router, prefix=f"{prefix}/analytics" if prefix else "/analytics", tags=["analytics"])
 
 @app.get("/health")
 async def health_check():
