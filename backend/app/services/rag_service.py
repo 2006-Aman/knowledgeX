@@ -3,7 +3,7 @@ import re
 import base64
 import unicodedata
 import fitz  # PyMuPDF
-from typing import List, Dict, Tuple, Any
+from typing import List, Dict, Tuple, Any, Optional
 from app.core.clients import supabase, azure_openai
 from app.core.config import settings
 
@@ -251,7 +251,7 @@ def extract_page_structured(page: fitz.Page, page_num: int, filename: str) -> Li
 
     return page_chunks
 
-def index_pdf_document(file_bytes: bytes, filename: str) -> Dict:
+def index_pdf_document(file_bytes: bytes, filename: str, user_id: Optional[str] = None) -> Dict:
     doc = fitz.open(stream=file_bytes, filetype="pdf")
     all_chunks = []
     
@@ -268,9 +268,12 @@ def index_pdf_document(file_bytes: bytes, filename: str) -> Dict:
     
     total_chunks = len(all_chunks)
     
-    # Delete any previous chunks for the same filename to avoid duplicates
+    # Delete any previous chunks for the same filename (and user) to avoid duplicates
     try:
-        supabase.table("documents").delete().filter("metadata->>source", "eq", filename).execute()
+        del_q = supabase.table("documents").delete().filter("metadata->>source", "eq", filename)
+        if user_id:
+            del_q = del_q.filter("metadata->>user_id", "eq", user_id)
+        del_q.execute()
     except Exception as e:
         print(f"Warning during duplicate purge: {e}")
 
@@ -283,12 +286,16 @@ def index_pdf_document(file_bytes: bytes, filename: str) -> Dict:
         )
         emb = emb_res.data[0].embedding
         
+        meta = {
+            "source": filename,
+            "page": item["page"]
+        }
+        if user_id:
+            meta["user_id"] = user_id
+            
         supabase.table("documents").insert({
             "content": chunk_text_content,
-            "metadata": {
-                "source": filename,
-                "page": item["page"]
-            },
+            "metadata": meta,
             "embedding": emb
         }).execute()
         
@@ -337,7 +344,7 @@ def extract_text_from_image_bytes(img_bytes: bytes, filename: str) -> str:
         print(f"Image vision extraction error: {e}")
         return ""
 
-def index_image_document(file_bytes: bytes, filename: str) -> Dict[str, Any]:
+def index_image_document(file_bytes: bytes, filename: str, user_id: Optional[str] = None) -> Dict[str, Any]:
     """Indexes an image (PNG, JPG, JPEG, WEBP) into Supabase using Azure OpenAI Vision and embeddings."""
     extracted_text = extract_text_from_image_bytes(file_bytes, filename)
     if not extracted_text:
@@ -362,9 +369,12 @@ def index_image_document(file_bytes: bytes, filename: str) -> Dict[str, Any]:
 
     total_chunks = len(all_chunks)
 
-    # Delete any previous chunks for the same filename
+    # Delete any previous chunks for the same filename (and user)
     try:
-        supabase.table("documents").delete().filter("metadata->>source", "eq", filename).execute()
+        del_q = supabase.table("documents").delete().filter("metadata->>source", "eq", filename)
+        if user_id:
+            del_q = del_q.filter("metadata->>user_id", "eq", user_id)
+        del_q.execute()
     except Exception as e:
         print(f"Warning during duplicate purge: {e}")
 
@@ -376,13 +386,17 @@ def index_image_document(file_bytes: bytes, filename: str) -> Dict[str, Any]:
         )
         emb = emb_res.data[0].embedding
         
+        meta = {
+            "source": filename,
+            "page": item["page"],
+            "type": "image"
+        }
+        if user_id:
+            meta["user_id"] = user_id
+            
         supabase.table("documents").insert({
             "content": chunk_text_content,
-            "metadata": {
-                "source": filename,
-                "page": item["page"],
-                "type": "image"
-            },
+            "metadata": meta,
             "embedding": emb
         }).execute()
 
@@ -393,7 +407,7 @@ def index_image_document(file_bytes: bytes, filename: str) -> Dict[str, Any]:
         "type": "image"
     }
 
-def search_relevant_context(query: str, top_k: int = 8, min_similarity: float = 0.15) -> Tuple[str, List[Dict]]:
+def search_relevant_context(query: str, top_k: int = 8, min_similarity: float = 0.15, user_id: Optional[str] = None) -> Tuple[str, List[Dict]]:
     """
     High-precision Hybrid RAG retrieval:
     1. Semantic vector search via Supabase match_documents.
@@ -417,6 +431,10 @@ def search_relevant_context(query: str, top_k: int = 8, min_similarity: float = 
             "match_count": top_k * 3
         }).execute()
         vec_matches = vec_res.data or []
+        
+        # User isolation filter on vector matches
+        if user_id:
+            vec_matches = [m for m in vec_matches if m.get("metadata", {}).get("user_id") == user_id]
 
         # 2. Extract significant terms, days, and question identifiers from query
         clean_q_words = re.sub(r'[^\w\s]', ' ', query_clean)
@@ -449,11 +467,14 @@ def search_relevant_context(query: str, top_k: int = 8, min_similarity: float = 
         batch_codes = re.findall(r'\b([0-9][A-Z]|[0-9]?[Gg][0-9]+)\b', query_clean)
         full_batches = re.findall(r'\b(?:CSE[- ]?)?(?:AIML|AIFT|AI)[- ]*(?:[0-9][A-Z]|[0-9]?[Gg][0-9]+|[0-9]+[A-Z]?)\b', query_clean, re.I)
 
-        # 3. Lexical / Keyword Search in Supabase
+        # 3. Lexical / Keyword Search in Supabase (with user isolation)
         keyword_matches = []
         for kw in keywords[:6]:
             try:
-                kw_res = supabase.table("documents").select("id, content, metadata").ilike("content", f"%{kw}%").limit(10).execute()
+                kw_q = supabase.table("documents").select("id, content, metadata")
+                if user_id:
+                    kw_q = kw_q.filter("metadata->>user_id", "eq", user_id)
+                kw_res = kw_q.ilike("content", f"%{kw}%").limit(10).execute()
                 if kw_res.data:
                     keyword_matches.extend(kw_res.data)
             except Exception:
@@ -464,7 +485,10 @@ def search_relevant_context(query: str, top_k: int = 8, min_similarity: float = 
             b_clean = b.strip()
             for pattern in [f"Class: %{b_clean}%", f"Aliases: %{b_clean}%", f"{b_clean} batch", f" {b_clean} "]:
                 try:
-                    b_res = supabase.table("documents").select("id, content, metadata").ilike("content", f"%{pattern}%").limit(5).execute()
+                    b_q = supabase.table("documents").select("id, content, metadata")
+                    if user_id:
+                        b_q = b_q.filter("metadata->>user_id", "eq", user_id)
+                    b_res = b_q.ilike("content", f"%{pattern}%").limit(5).execute()
                     if b_res.data:
                         keyword_matches.extend(b_res.data)
                 except Exception:
@@ -474,11 +498,18 @@ def search_relevant_context(query: str, top_k: int = 8, min_similarity: float = 
         for num in list(target_q_nums)[:4]:
             for pattern in [f"Ques. {num}", f"Question {num}", f"Ques {num}", f"{num}th day", f"Q{num}"]:
                 try:
-                    p_res = supabase.table("documents").select("id, content, metadata").ilike("content", f"%{pattern}%").limit(5).execute()
+                    p_q = supabase.table("documents").select("id, content, metadata")
+                    if user_id:
+                        p_q = p_q.filter("metadata->>user_id", "eq", user_id)
+                    p_res = p_q.ilike("content", f"%{pattern}%").limit(5).execute()
                     if p_res.data:
                         keyword_matches.extend(p_res.data)
                 except Exception:
                     pass
+
+        # Safety filter on keyword matches
+        if user_id:
+            keyword_matches = [m for m in keyword_matches if m.get("metadata", {}).get("user_id") == user_id]
 
         # 4. RRF (Reciprocal Rank Fusion) and Hybrid Scoring
         scores = {}
@@ -541,11 +572,18 @@ def search_relevant_context(query: str, top_k: int = 8, min_similarity: float = 
                 next_page = top_page + 1
                 if (top_src, next_page) not in existing_pages:
                     try:
-                        adj_res = supabase.table("documents").select("id, content, metadata").eq("metadata->>source", top_src).eq("metadata->>page", next_page).limit(1).execute()
+                        adj_q = supabase.table("documents").select("id, content, metadata").eq("metadata->>source", top_src).eq("metadata->>page", next_page)
+                        if user_id:
+                            adj_q = adj_q.filter("metadata->>user_id", "eq", user_id)
+                        adj_res = adj_q.limit(1).execute()
                         if adj_res.data:
                             selected_docs.append(adj_res.data[0])
                     except Exception:
                         pass
+
+        # Final safety filter to guarantee no other user's documents ever leak
+        if user_id:
+            selected_docs = [d for d in selected_docs if d.get("metadata", {}).get("user_id") == user_id]
 
 
         context_blocks = []
@@ -578,15 +616,20 @@ def search_relevant_context(query: str, top_k: int = 8, min_similarity: float = 
         print(f"RAG search error: {e}")
         return "", []
 
-def list_indexed_documents() -> List[Dict]:
+def list_indexed_documents(user_id: Optional[str] = None) -> List[Dict]:
     try:
-        res = supabase.table("documents").select("metadata").limit(500).execute()
+        q = supabase.table("documents").select("metadata").limit(1000)
+        if user_id:
+            q = q.filter("metadata->>user_id", "eq", user_id)
+        res = q.execute()
         data = res.data or []
         sources = {}
         types = {}
         for row in data:
             meta = row.get("metadata", {})
             if meta.get("type") in ["app_user", "user_conversations"]:
+                continue
+            if user_id and meta.get("user_id") != user_id:
                 continue
             src = meta.get("source")
             if not src:
@@ -606,27 +649,40 @@ def list_indexed_documents() -> List[Dict]:
         print(f"List documents error: {e}")
         return []
 
-def purge_all_documents() -> bool:
+def purge_all_documents(user_id: Optional[str] = None) -> bool:
     try:
-        supabase.table("documents").delete().neq("id", 0).execute()
+        if user_id:
+            supabase.table("documents").delete().filter("metadata->>user_id", "eq", user_id).execute()
+        else:
+            supabase.table("documents").delete().neq("id", 0).execute()
         return True
     except Exception as e:
         print(f"Purge error: {e}")
         return False
 
-def delete_document(filename: str) -> bool:
+def delete_document(filename: str, user_id: Optional[str] = None) -> bool:
     try:
-        supabase.table("documents").delete().filter("metadata->>source", "eq", filename).execute()
+        del_q = supabase.table("documents").delete().filter("metadata->>source", "eq", filename)
+        if user_id:
+            del_q = del_q.filter("metadata->>user_id", "eq", user_id)
+        del_q.execute()
         return True
     except Exception as e:
         print(f"Delete document error: {e}")
         return False
 
-def get_document_content(filename: str) -> Dict[str, Any]:
+def get_document_content(filename: str, user_id: Optional[str] = None) -> Dict[str, Any]:
     try:
-        res = supabase.table("documents").select("id, content, metadata").limit(500).execute()
+        q = supabase.table("documents").select("id, content, metadata").limit(500)
+        if user_id:
+            q = q.filter("metadata->>user_id", "eq", user_id)
+        res = q.execute()
         data = res.data or []
-        chunks = [row for row in data if row.get("metadata", {}).get("source") == filename]
+        chunks = [
+            row for row in data 
+            if row.get("metadata", {}).get("source") == filename 
+            and (not user_id or row.get("metadata", {}).get("user_id") == user_id)
+        ]
         # Sort by page number if available
         chunks.sort(key=lambda c: (c.get("metadata", {}).get("page") or 0))
         content_text = "\n\n---\n\n".join(clean_extracted_text(c.get("content", "")) for c in chunks if c.get("content"))

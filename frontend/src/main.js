@@ -163,20 +163,39 @@ if (savedUser) {
   fetchUserConversationsFromSupabase(savedUser);
 }
 
+// ── GET EFFECTIVE USER ID FOR USER DATA ISOLATION ──
+function getEffectiveUserId() {
+  if (state.user && state.user.id) {
+    return state.user.id;
+  }
+  let guestId = localStorage.getItem('knowledgex_guest_id');
+  if (!guestId) {
+    guestId = 'guest_' + Math.random().toString(36).substring(2, 10);
+    localStorage.setItem('knowledgex_guest_id', guestId);
+  }
+  return guestId;
+}
+
 // ── FETCH DOCUMENTS FROM SUPABASE (PERSISTENCE ON RELOAD) ──
 async function fetchDocuments() {
   try {
-    const res = await fetch('/api/documents');
+    const userId = getEffectiveUserId();
+    const res = await fetch(`/api/documents?user_id=${encodeURIComponent(userId)}`);
     if (res.ok) {
       const docs = await res.json();
       state.documentsList = docs || [];
       // If we have documents and no referencedDocs yet, set the top document
-      if (state.documentsList.length > 0 && state.referencedDocs.length === 0) {
-        state.referencedDocs = state.documentsList.slice(0, 1).map(d => ({
-          name: d.name,
-          description: 'Available in knowledge base'
-        }));
+      if (state.documentsList.length > 0) {
+        if (state.referencedDocs.length === 0) {
+          state.referencedDocs = state.documentsList.slice(0, 1).map(d => ({
+            name: d.name,
+            description: 'Available in knowledge base'
+          }));
+        }
+      } else {
+        state.referencedDocs = [];
       }
+      renderApp();
     }
   } catch (err) {
     console.warn('Could not fetch documents from Supabase:', err);
@@ -199,7 +218,8 @@ async function openDocumentViewer(docName) {
   renderApp();
 
   try {
-    const res = await fetch(`/api/documents/${encodeURIComponent(docName)}/content`);
+    const userId = getEffectiveUserId();
+    const res = await fetch(`/api/documents/${encodeURIComponent(docName)}/content?user_id=${encodeURIComponent(userId)}`);
     if (!res.ok) {
       throw new Error(`Server returned error ${res.status}`);
     }
@@ -259,6 +279,7 @@ async function handlePdfUpload(file) {
 
   const formData = new FormData();
   formData.append('file', file);
+  formData.append('user_id', getEffectiveUserId());
 
   try {
     const res = await fetch('/api/documents/upload', {
@@ -316,7 +337,8 @@ async function handleDeleteDocument(docName) {
     isDanger: true,
     onConfirm: async () => {
       try {
-        const res = await fetch(`/api/documents/${encodeURIComponent(docName)}`, {
+        const userId = getEffectiveUserId();
+        const res = await fetch(`/api/documents/${encodeURIComponent(docName)}?user_id=${encodeURIComponent(userId)}`, {
           method: 'DELETE'
         });
         if (!res.ok) {
@@ -352,7 +374,8 @@ async function handlePurgeDocuments() {
     isDanger: true,
     onConfirm: async () => {
       try {
-        const res = await fetch('/api/documents/purge', {
+        const userId = getEffectiveUserId();
+        const res = await fetch(`/api/documents/purge?user_id=${encodeURIComponent(userId)}`, {
           method: 'DELETE'
         });
         if (!res.ok) {
@@ -668,6 +691,7 @@ function attachAuthEventListeners() {
           state.activeConvId = freshConv.id;
           persistConversations();
           fetchUserConversationsFromSupabase(data.user);
+          fetchDocuments();
 
           state.isAuthLoading = false;
           state.activeTab = 'chat';
@@ -784,6 +808,7 @@ function attachEventListeners() {
       state.conversations.unshift(freshConv);
     }
     state.activeConvId = freshConv.id;
+    fetchDocuments();
 
     state.activeTab = 'dashboard';
     state.authMode = 'login';
@@ -955,7 +980,8 @@ function attachEventListeners() {
         body: JSON.stringify({
           conversation_id: currentConv.id,
           message: text,
-          history: historyPayload
+          history: historyPayload,
+          user_id: getEffectiveUserId()
         })
       });
 
@@ -1116,7 +1142,8 @@ function attachEventListeners() {
           body: JSON.stringify({
             conversation_id: currentConv.id,
             message: userQuery,
-            history: historyPayload
+            history: historyPayload,
+            user_id: getEffectiveUserId()
           })
         });
 

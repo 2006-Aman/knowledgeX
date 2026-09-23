@@ -24,6 +24,7 @@ class ChatRequest(BaseModel):
     conversation_id: str
     message: str
     history: Optional[List[ChatMessage]] = []
+    user_id: Optional[str] = None
 
 class ChatResponse(BaseModel):
     conversation_id: str
@@ -146,26 +147,26 @@ async def process_chat(req: ChatRequest):
         )
 
     # 3. Search RAG context (search query + fallback to recent conversation topic if follow-up)
-    rag_context, sources = search_relevant_context(query)
+    rag_context, sources = search_relevant_context(query, user_id=req.user_id)
     
     # If direct query didn't match, check if this is a follow-up query relying on recent conversation
     if not rag_context.strip() and req.history:
         recent_user_msgs = [h.content for h in req.history if h.role == 'user' and h.content]
         if recent_user_msgs:
             augmented_query = f"{recent_user_msgs[-1]} {query}"
-            rag_context, sources = search_relevant_context(augmented_query)
+            rag_context, sources = search_relevant_context(augmented_query, user_id=req.user_id)
 
     has_context = bool(rag_context.strip())
 
     # 4. If no relevant document context exists: STRICT RAG REFUSAL (Zero web / external answers)
     if not has_context:
-        all_docs = list_indexed_documents()
+        all_docs = list_indexed_documents(user_id=req.user_id)
         if not all_docs:
-            answer = "No documents have been uploaded yet."
-            explanation = "This system is configured strictly as a document-grounded RAG model and only answers questions from uploaded files. Please upload a PDF or image document using the attachment button."
+            answer = "You have not uploaded any documents yet."
+            explanation = "This system is configured strictly as a document-grounded RAG model and only answers questions from your uploaded files. Please upload a PDF or image document using the attachment button."
         else:
             answer = "I could not find any information regarding this in your uploaded documents."
-            explanation = "This system operates strictly as a closed-domain RAG assistant. Answers from the web or external pre-trained knowledge are completely disabled. Please upload a document containing this information or ask a question based on your uploaded files."
+            explanation = "This system operates strictly as a closed-domain RAG assistant. Answers from other users' files or external knowledge are completely disabled. Please upload a document containing this information or ask a question based on your uploaded files."
 
         elapsed_time = max(round(time.time() - start_time, 1), 0.2)
         return ChatResponse(
