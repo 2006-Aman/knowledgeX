@@ -503,7 +503,7 @@ function renderApp() {
   } else if (state.activeTab === 'documents') {
     mainContentHtml = renderDocumentsView(state.documentsList, state.isUploadingDoc);
   } else if (state.activeTab === 'dashboard') {
-    mainContentHtml = renderDashboardView(state.documentsList, state.workflowState, state.user);
+    mainContentHtml = renderDashboardView(state.documentsList, state.workflowState, state.user, state.conversations);
   }
 
   app.innerHTML = `

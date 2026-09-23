@@ -190,13 +190,25 @@ const AGENT_DATA = {
   }
 };
 
-export function renderDashboardView(documentsList = [], workflowState = {}, user = null) {
-  const totalDocs = documentsList.length || 6;
-  const totalChunks = documentsList.reduce((acc, d) => acc + (d.chunks || 0), 0) || 210;
+export function renderDashboardView(documentsList = [], workflowState = {}, user = null, conversations = []) {
+  const totalDocs = documentsList ? documentsList.length : 0;
+  const totalChunks = documentsList ? documentsList.reduce((acc, d) => acc + (d.chunks || 0), 0) : 0;
   activeTotalChunks = totalChunks;
+
+  // Real user queries count from user's conversations
+  const userQueriesCount = conversations ? conversations.reduce((acc, c) => acc + (c.messages ? c.messages.filter(m => m.role === 'user').length : 0), 0) : 0;
 
   const initialTf = TIMEFRAME_DATA[currentTimeframe] || TIMEFRAME_DATA['7d'];
   const yLabels = initialTf.yGrid[currentMetricView];
+
+  // Dynamic user query metrics
+  const queriesVal = userQueriesCount > 0 ? userQueriesCount.toLocaleString() : '0';
+  const queriesTrend = userQueriesCount > 0 ? 'Active' : 'Ready';
+  const queriesMeta = userQueriesCount > 0 ? `${userQueriesCount} consultations processed` : 'No consultations started yet';
+  const queriesSparkline = userQueriesCount > 0 ? `${Math.min(100, Math.max(10, userQueriesCount * 12))}%` : '0%';
+
+  const chunksSparkline = totalChunks > 0 ? '92%' : '0%';
+  const chunksMeta = totalDocs > 0 ? `${totalDocs} indexed in Supabase` : 'No documents uploaded yet';
 
   return `
     <div class="dash-pastel-workspace" id="dashboard-pastel-container">
@@ -212,7 +224,7 @@ export function renderDashboardView(documentsList = [], workflowState = {}, user
             </span>
           </div>
           <p class="dash-pastel-desc">
-            Real-time analytics on multi-agent synthesis, vector embeddings, retrieval latency, and active security guardrails.
+            ${user ? `Welcome back, ${user.name || user.email}. Live telemetry for your isolated Supabase repository.` : 'Real-time analytics on multi-agent synthesis, vector embeddings, retrieval latency, and active security guardrails.'}
           </p>
         </div>
 
@@ -247,15 +259,15 @@ export function renderDashboardView(documentsList = [], workflowState = {}, user
             <span class="kpi-icon">💬</span>
           </div>
           <div class="kpi-main-metric">
-            <span class="kpi-big-num" id="kpi-queries-val">${initialTf.queriesVal}</span>
-            <span class="kpi-trend positive" id="kpi-queries-trend">${initialTf.queriesTrend}</span>
+            <span class="kpi-big-num" id="kpi-queries-val">${queriesVal}</span>
+            <span class="kpi-trend ${userQueriesCount > 0 ? 'positive' : 'neutral'}" id="kpi-queries-trend">${queriesTrend}</span>
           </div>
           <div class="kpi-meta-desc" id="kpi-queries-meta">
-            <span>${initialTf.queriesMeta}</span>
-            <span class="kpi-dim-tag">100% SLA</span>
+            <span>${queriesMeta}</span>
+            <span class="kpi-dim-tag">${userQueriesCount > 0 ? 'Live Telemetry' : 'Zero State'}</span>
           </div>
           <div class="kpi-sparkline-track">
-            <div class="kpi-sparkline-fill" id="kpi-queries-sparkline" style="width: ${initialTf.queriesSparkline};"></div>
+            <div class="kpi-sparkline-fill" id="kpi-queries-sparkline" style="width: ${queriesSparkline};"></div>
           </div>
         </div>
 
@@ -271,10 +283,10 @@ export function renderDashboardView(documentsList = [], workflowState = {}, user
           </div>
           <div class="kpi-meta-desc">
             <span>1536-D pgvector HNSW</span>
-            <span class="kpi-status-live">Supabase Cloud</span>
+            <span class="kpi-status-live">${totalDocs > 0 ? 'Supabase Live' : 'Empty Store'}</span>
           </div>
           <div class="kpi-sparkline-track">
-            <div class="kpi-sparkline-fill fill-blue" style="width: 92%;"></div>
+            <div class="kpi-sparkline-fill fill-blue" style="width: ${chunksSparkline};"></div>
           </div>
         </div>
 
@@ -285,8 +297,8 @@ export function renderDashboardView(documentsList = [], workflowState = {}, user
             <span class="kpi-icon">⏱️</span>
           </div>
           <div class="kpi-main-metric">
-            <span class="kpi-big-num" id="kpi-latency-val">${initialTf.latencyVal}</span>
-            <span class="kpi-trend positive" id="kpi-latency-pill">${initialTf.latencyPill}</span>
+            <span class="kpi-big-num" id="kpi-latency-val">${userQueriesCount > 0 ? initialTf.latencyVal : '0.2s'}</span>
+            <span class="kpi-trend positive" id="kpi-latency-pill">${userQueriesCount > 0 ? initialTf.latencyPill : '⚡ Instant'}</span>
           </div>
           <div class="kpi-meta-desc" id="kpi-latency-meta">
             <span>${initialTf.latencyMeta}</span>
@@ -523,59 +535,74 @@ export function renderDashboardView(documentsList = [], workflowState = {}, user
         <div class="dash-donut-card">
           <div class="donut-header">
             <h3 class="chart-title">Document Knowledge Distribution</h3>
-            <span class="chart-subtitle">Vector chunks by content category</span>
+            <span class="chart-subtitle">${totalDocs > 0 ? `${totalDocs} document${totalDocs > 1 ? 's' : ''} in your repository` : 'No documents indexed yet'}</span>
           </div>
 
           <div class="donut-content-layout">
-            <div class="donut-svg-wrap">
-              <svg class="donut-chart-svg" viewBox="0 0 140 140">
-                <circle cx="70" cy="70" r="50" fill="transparent" stroke="rgba(124,109,240,0.1)" stroke-width="18"/>
-                <!-- Segment 1: Reports -->
-                <circle class="donut-segment seg-reports" id="donut-seg-reports" cx="70" cy="70" r="50" fill="transparent" stroke="#7C6DF0" stroke-width="18"
-                        stroke-dasharray="${initialTf.donut.reports.dasharray}" stroke-dashoffset="${initialTf.donut.reports.dashoffset}"
-                        data-name="Business Reports" data-pct="${initialTf.donut.reports.pct}" data-chunks="${initialTf.donut.reports.chunks}"/>
-                <!-- Segment 2: Syllabi -->
-                <circle class="donut-segment seg-syllabi" id="donut-seg-syllabi" cx="70" cy="70" r="50" fill="transparent" stroke="#38BDF8" stroke-width="18"
-                        stroke-dasharray="${initialTf.donut.syllabi.dasharray}" stroke-dashoffset="${initialTf.donut.syllabi.dashoffset}"
-                        data-name="Academic Documents" data-pct="${initialTf.donut.syllabi.pct}" data-chunks="${initialTf.donut.syllabi.chunks}"/>
-                <!-- Segment 3: Specs -->
-                <circle class="donut-segment seg-specs" id="donut-seg-specs" cx="70" cy="70" r="50" fill="transparent" stroke="#34D399" stroke-width="18"
-                        stroke-dasharray="${initialTf.donut.specs.dasharray}" stroke-dashoffset="${initialTf.donut.specs.dashoffset}"
-                        data-name="Technical Manuals" data-pct="${initialTf.donut.specs.pct}" data-chunks="${initialTf.donut.specs.chunks}"/>
-                <!-- Segment 4: Schedules -->
-                <circle class="donut-segment seg-sched" id="donut-seg-sched" cx="70" cy="70" r="50" fill="transparent" stroke="#F59E0B" stroke-width="18"
-                        stroke-dasharray="${initialTf.donut.sched.dasharray}" stroke-dashoffset="${initialTf.donut.sched.dashoffset}"
-                        data-name="Timetables & Data" data-pct="${initialTf.donut.sched.pct}" data-chunks="${initialTf.donut.sched.chunks}"/>
-              </svg>
-              <div class="donut-center-readout" id="donut-readout">
-                <span class="readout-pct" id="donut-pct">100%</span>
-                <span class="readout-label" id="donut-label">${totalChunks} Chunks</span>
+            ${totalChunks === 0 ? `
+              <div class="donut-svg-wrap">
+                <svg class="donut-chart-svg" viewBox="0 0 140 140">
+                  <circle cx="70" cy="70" r="50" fill="transparent" stroke="rgba(124,109,240,0.2)" stroke-width="16" stroke-dasharray="6 6"/>
+                </svg>
+                <div class="donut-center-readout" id="donut-readout">
+                  <span class="readout-pct" id="donut-pct">0%</span>
+                  <span class="readout-label" id="donut-label">0 Chunks</span>
+                </div>
               </div>
-            </div>
 
-            <!-- Legend List -->
-            <div class="donut-legend-list">
-              <div class="legend-row" data-seg="reports">
-                <span class="legend-bullet b-purple"></span>
-                <span class="legend-name">Business Reports</span>
-                <span class="legend-val" id="donut-leg-reports">${initialTf.donut.reports.pct}</span>
+              <div class="donut-legend-list">
+                <div style="color:var(--color-text-muted);font-size:0.83rem;line-height:1.6;padding:0.75rem 0;">
+                  No documents in your knowledge base yet.<br/>Upload a PDF or image in the <strong>Documents</strong> tab to see your vector distribution.
+                </div>
               </div>
-              <div class="legend-row" data-seg="syllabi">
-                <span class="legend-bullet b-blue"></span>
-                <span class="legend-name">Academic Documents</span>
-                <span class="legend-val" id="donut-leg-syllabi">${initialTf.donut.syllabi.pct}</span>
-              </div>
-              <div class="legend-row" data-seg="specs">
-                <span class="legend-bullet b-emerald"></span>
-                <span class="legend-name">Technical Manuals</span>
-                <span class="legend-val" id="donut-leg-specs">${initialTf.donut.specs.pct}</span>
-              </div>
-              <div class="legend-row" data-seg="sched">
-                <span class="legend-bullet b-amber"></span>
-                <span class="legend-name">Timetables & Data</span>
-                <span class="legend-val" id="donut-leg-sched">${initialTf.donut.sched.pct}</span>
-              </div>
-            </div>
+            ` : (() => {
+                const topDocs = [...documentsList].sort((a, b) => (b.chunks || 0) - (a.chunks || 0)).slice(0, 4);
+                const colors = ['#7C6DF0', '#38BDF8', '#34D399', '#F59E0B'];
+                const bulletClasses = ['b-purple', 'b-blue', 'b-emerald', 'b-amber'];
+                let offset = 0;
+                const segments = topDocs.map((doc, idx) => {
+                  const pct = Math.max(1, Math.round(((doc.chunks || 1) / totalChunks) * 100));
+                  const dash = Math.round((pct / 100) * 314);
+                  const seg = {
+                    name: doc.name,
+                    chunks: `${doc.chunks} chunks`,
+                    pct: `${pct}%`,
+                    dasharray: `${dash} 314`,
+                    dashoffset: `-${offset}`,
+                    color: colors[idx % colors.length],
+                    bullet: bulletClasses[idx % bulletClasses.length]
+                  };
+                  offset += dash;
+                  return seg;
+                });
+
+                return `
+                  <div class="donut-svg-wrap">
+                    <svg class="donut-chart-svg" viewBox="0 0 140 140">
+                      <circle cx="70" cy="70" r="50" fill="transparent" stroke="rgba(124,109,240,0.1)" stroke-width="18"/>
+                      ${segments.map(s => `
+                        <circle class="donut-segment" cx="70" cy="70" r="50" fill="transparent" stroke="${s.color}" stroke-width="18"
+                                stroke-dasharray="${s.dasharray}" stroke-dashoffset="${s.dashoffset}"
+                                data-name="${s.name}" data-pct="${s.pct}" data-chunks="${s.chunks}"/>
+                      `).join('')}
+                    </svg>
+                    <div class="donut-center-readout" id="donut-readout">
+                      <span class="readout-pct" id="donut-pct">100%</span>
+                      <span class="readout-label" id="donut-label">${totalChunks} Chunks</span>
+                    </div>
+                  </div>
+
+                  <div class="donut-legend-list">
+                    ${segments.map(s => `
+                      <div class="legend-row">
+                        <span class="legend-bullet ${s.bullet}"></span>
+                        <span class="legend-name" title="${s.name}">${s.name.length > 22 ? s.name.substring(0, 20) + '...' : s.name}</span>
+                        <span class="legend-val">${s.pct}</span>
+                      </div>
+                    `).join('')}
+                  </div>
+                `;
+              })()}
           </div>
         </div>
       </div>
